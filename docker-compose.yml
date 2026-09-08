@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  # --------------------------------------------------------------------------
+  # MLflow Tracking Server
+  # --------------------------------------------------------------------------
+  mlflow_server:
+    image: ghcr.io/mlflow/mlflow:v2.8.0
+    container_name: mlflow_server
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/mlruns
+    volumes:
+      - mlflow_data:/mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # Model Serving API
+  # --------------------------------------------------------------------------
+  model_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: model_api
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5000
+      - MODEL_NAME=ClassificationModel
+      - MAX_RETRIES=10
+      - RETRY_DELAY=5
+    depends_on:
+      mlflow_server:
+        condition: service_started
+    volumes:
+      - mlflow_data:/mlflow
+
+volumes:
+  mlflow_data:
+    driver: local
